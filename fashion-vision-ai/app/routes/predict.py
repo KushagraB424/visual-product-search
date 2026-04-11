@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from fastapi import APIRouter, File, Request, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
@@ -42,19 +43,46 @@ async def health_check(request: Request):
 async def predict(request: Request, file: UploadFile = File(...)):
     """
     Full pipeline: image → segmentation → classification.
+    On lightweight deploys (no local YOLO), uses Roboflow when configured.
     Shopping links are handled separately via /api/chat.
     """
-    pipeline = getattr(request.app.state, "pipeline", None)
-    if pipeline is None:
-        return PredictionResponse(success=False, message=_LOCAL_ML_DISABLED_MSG)
-
     try:
         image = await load_image_from_upload(file)
     except ValueError as exc:
         return PredictionResponse(success=False, message=str(exc))
 
-    result = await pipeline.run(image)
-    return result
+    pipeline = getattr(request.app.state, "pipeline", None)
+    if pipeline is not None:
+        return await pipeline.run(image)
+
+    roboflow_seg = getattr(request.app.state, "roboflow_seg_service", None)
+    if roboflow_seg is not None:
+        from app.services.roboflow_prediction_adapter import (
+            roboflow_json_to_prediction_response,
+        )
+
+        t0 = time.perf_counter()
+        try:
+            rf_json = roboflow_seg.segment(image)
+        except Exception as exc:
+            logger.exception("Roboflow segmentation failed")
+            return PredictionResponse(
+                success=False,
+                message=f"Cloud segmentation failed: {exc}",
+            )
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        if not isinstance(rf_json, dict):
+            return PredictionResponse(
+                success=False,
+                message="Unexpected response from cloud segmentation.",
+            )
+        err = rf_json.get("error")
+        if err is not None and not rf_json.get("predictions"):
+            msg = err if isinstance(err, str) else str(err)
+            return PredictionResponse(success=False, message=msg)
+        return roboflow_json_to_prediction_response(image, rf_json, elapsed_ms)
+
+    return PredictionResponse(success=False, message=_LOCAL_ML_DISABLED_MSG)
 
 
 @router.post("/segment", tags=["Segmentation"])
