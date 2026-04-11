@@ -1,65 +1,99 @@
-# Multi-Object Fashion Segmentation & Agentic Shopping
+# Fashion Vision AI
 
-> Occlusion-Aware Data Augmentation Pipeline with AI-Powered Shopping Recommendations
+**Multi-object fashion segmentation, garment classification, and an AI shopping assistant** (OpenRouter). Includes an occlusion-aware training augmentation pipeline and Colab fine-tuning notebooks.
 
-## 🎯 Overview
+---
 
-This project implements an end-to-end AI system that:
+## What it does
 
-1. **Segments** multiple clothing items from fashion images using YOLOv8-seg
-2. **Classifies** each garment into 15 categories using EfficientNet-B0
-3. **Finds shopping links** using an AI agent (OpenRouter / Qwen 3.6 Plus)
-4. **Augments training data** with a novel occlusion-aware pipeline
+1. **Segment** clothing regions (local **YOLOv8-seg** or cloud **Roboflow** instance segmentation).
+2. **Classify** each crop into clothing categories with **EfficientNet-B0** (local pipeline only).
+3. **Shopping assistant**: builds real search URLs per item and optionally wraps them with an LLM via **OpenRouter** (`/api/chat`).
 
-## 🚀 Quick Start
+The web UI at `/` uploads an image, runs **`/api/predict`**, shows detected items, and opens the chat panel with recommendations.
 
-### 1. Install Dependencies
+---
+
+## Run modes
+
+| Mode | When | Segmentation | Classification |
+|------|------|----------------|----------------|
+| **Full local ML** | Default locally; `SKIP_LOCAL_ML` unset and `RENDER` unset | YOLOv8-seg | EfficientNet-B0 |
+| **Lightweight / cloud** | `SKIP_LOCAL_ML=true` **or** `RENDER=true` (e.g. Render) | Roboflow API if `ROBOFLOW_API_KEY` is set | Heuristic color/pattern on bbox crops only |
+
+When local models are off but **Roboflow** is configured, **`/api/predict` still works**: it calls Roboflow, maps results to the same JSON shape as the local pipeline, and saves bbox crops for the UI.
+
+---
+
+## Quick start (full local stack)
 
 ```bash
+cd fashion-vision-ai   # inner app directory containing app/, utils/, etc.
+python -m venv .venv
+.venv\Scripts\activate   # Windows
+# source .venv/bin/activate  # macOS/Linux
+
 pip install -r requirements.txt
-```
-
-### 2. Configure Environment
-
-```bash
 cp .env.example .env
-# Edit .env and add your OpenRouter API key
-```
-
-### 3. Download Pretrained Models
-
-```bash
+# Set OPENROUTER_API_KEY (optional, for LLM chat). Download weights if needed:
 python -m models.download_models
-```
 
-### 4. Start the Server
-
-```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 5. Open the Web Interface
+Open **http://localhost:8000**.
 
-Navigate to **http://localhost:8000** in your browser.
+---
 
-## 📡 API Endpoints
+## Deploy on Render
+
+The repo includes a **Blueprint** at the repository root: `render.yaml` (service **`rootDir`**: inner `fashion-vision-ai` folder).
+
+- **Build:** `pip install -r requirements-render.txt` (no PyTorch / Ultralytics; smaller image).
+- **Start:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **Required for segmentation in production:** set **`ROBOFLOW_API_KEY`** in the Render dashboard.
+- **Optional:** `OPENROUTER_API_KEY` for conversational shopping messages in `/api/chat`.
+
+`SKIP_LOCAL_ML=true` is set in the blueprint so the server does not load YOLO or the classifier. Render also sets **`RENDER=true`**, which alone enables lightweight mode if you omit `SKIP_LOCAL_ML`.
+
+---
+
+## Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `OPENROUTER_API_KEY` | OpenRouter API key for the shopping chat LLM (optional; static link fallback if unset). |
+| `OPENROUTER_MODEL` | Model id (default: `qwen/qwen3.6-plus:free`). |
+| `ROBOFLOW_API_KEY` | Roboflow API key; enables cloud segmentation and powers `/api/predict` when local ML is disabled. |
+| `SKIP_LOCAL_ML` | If `true` / `1` / `yes`, do not load YOLO or EfficientNet. |
+| `RENDER` | Set to `true` on Render; treated like lightweight mode for local ML (same as above). |
+| `SEGMENTATION_MODEL_PATH` | Local YOLO weights path (default: `yolov8n-seg.pt`). |
+| `CLASSIFICATION_MODEL_PATH` | Local classifier weights under `models/weights/`. |
+| `CONFIDENCE_THRESHOLD` | Local YOLO confidence (default `0.35`). |
+| `IMAGE_SIZE` | Local YOLO input size (default `640`). |
+| `HOST` / `PORT` | Server bind (default `0.0.0.0` / `8000`). |
+
+---
+
+## API
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | GET | Web upload interface |
-| `/api/predict` | POST | Full pipeline (segment → classify → shop) |
-| `/api/segment` | POST | Segmentation only |
-| `/api/health` | GET | Health check |
-| `/docs` | GET | Interactive API docs (Swagger) |
+| `/` | GET | Web UI |
+| `/api/predict` | POST | `multipart/form-data` with `file` — full pipeline locally, or Roboflow + adapter when lightweight |
+| `/api/segment` | POST | Local YOLO segmentation only (503 if local ML off) |
+| `/api/roboflow-segment` | POST | Raw Roboflow JSON (503 if no API key) |
+| `/api/chat` | POST | Shopping assistant from detected items |
+| `/api/health` | GET | Status; includes `local_ml_enabled`, model loaded flags |
+| `/docs` | GET | Swagger UI |
 
-### Example API Call
+Example:
 
 ```bash
-curl -X POST http://localhost:8000/api/predict \
-  -F "file=@your_fashion_image.jpg"
+curl -s -X POST http://localhost:8000/api/predict -F "file=@photo.jpg"
 ```
 
-### Example Response
+Example success shape (abbreviated):
 
 ```json
 {
@@ -71,83 +105,66 @@ curl -X POST http://localhost:8000/api/predict \
       "confidence": 0.92,
       "color": "black",
       "pattern": "solid",
-      "shopping_links": [
-        {
-          "title": "Black Leather Jacket",
-          "url": "https://www.amazon.in/...",
-          "platform": "Amazon",
-          "price_range": "₹2000-₹5000"
-        }
-      ]
+      "bbox": [120.0, 80.0, 400.0, 520.0],
+      "crop_path": "/static/crops/jacket_abc123.png",
+      "shopping_links": []
     }
   ],
-  "num_items_detected": 3,
-  "processing_time_ms": 845.2
+  "num_items_detected": 1,
+  "processing_time_ms": 845.2,
+  "image_width": 1024,
+  "image_height": 768,
+  "message": "Detected 1 clothing item(s)."
 }
 ```
 
-## 📁 Project Structure
+Shopping copy is produced via **`/api/chat`** using programmatic URLs (LLM optional).
+
+---
+
+## Project layout (app folder)
 
 ```
 ├── app/
-│   ├── main.py              # FastAPI app + lifespan model loading
-│   ├── config.py             # Environment configuration
-│   ├── schemas.py            # Pydantic response models
-│   ├── routes/
-│   │   └── predict.py        # API endpoints
+│   ├── main.py                 # FastAPI, lifespan, optional ML + Roboflow
+│   ├── config.py
+│   ├── schemas.py
+│   ├── routes/predict.py       # /api/predict, segment, chat, health, roboflow
 │   ├── services/
-│   │   ├── segmentation.py   # YOLOv8-seg wrapper
-│   │   ├── classification.py # EfficientNet-B0 classifier
-│   │   ├── agent.py          # OpenRouter shopping agent
-│   │   └── pipeline.py       # Full prediction pipeline
-│   └── templates/
-│       └── index.html        # Web upload interface
-├── augmentation_pipeline/
-│   ├── augmentor.py          # Main orchestrator
-│   ├── garment_extractor.py  # Garment bank builder
-│   ├── occlusion.py          # Occlusion simulator (core contribution)
-│   ├── compositor.py         # Multi-person scene compositor
-│   ├── background.py         # Background replacement
-│   ├── transforms.py         # Geometric/photometric transforms
-│   └── config.py             # Pipeline configuration
-├── models/
-│   ├── download_models.py    # Weight downloader
-│   └── weights/              # Model weights directory
+│   │   ├── segmentation.py     # YOLOv8-seg
+│   │   ├── classification.py   # EfficientNet-B0
+│   │   ├── pipeline.py         # Local segment → classify
+│   │   ├── roboflow_segmentation.py
+│   │   ├── roboflow_prediction_adapter.py  # Roboflow JSON → PredictionResponse
+│   │   └── agent.py            # OpenRouter + shopping URLs
+│   └── templates/index.html
+├── utils/image_utils.py
+├── models/download_models.py
+├── augmentation_pipeline/      # Occlusion-aware data augmentation (research)
 ├── colab_notebook/
-│   └── fashion_segmentation_finetuning.ipynb
-├── utils/
-│   └── image_utils.py        # Image processing utilities
-├── static/                   # Served static files
-├── requirements.txt
-├── .env.example
+├── requirements.txt            # Full stack (torch, ultralytics, timm, …)
+├── requirements-render.txt     # Slim deps for Render
 └── README.md
 ```
 
-## 🧪 Augmentation Pipeline (Research Contribution)
+At the **repository root** (parent of this folder), `render.yaml` defines the Render web service and points **`rootDir`** at this inner `fashion-vision-ai` directory.
 
-The occlusion-aware augmentation pipeline generates synthetic training data with:
+---
 
-- **Garment extraction** → builds a reusable garment bank from source images
-- **Occlusion simulation** → layers garments with controlled overlap ratios (10-70%)
-- **Multi-person composition** → places up to 4 people per scene
-- **Background replacement** → real-world, gradient, clutter, or solid backgrounds
-- **Standard transforms** → rotation, scale, flip, brightness, hue, perspective
+## Augmentation pipeline
 
-## 📓 Colab Notebook
+The `augmentation_pipeline/` package implements garment extraction, occlusion simulation, multi-person composition, and background replacement for synthetic training data. See module docstrings and configs inside that directory.
 
-The notebook (`colab_notebook/fashion_segmentation_finetuning.ipynb`) includes:
+---
 
-- Complete fine-tuning for both segmentation and classification
-- **10+ comparison plots**: loss curves, accuracy curves, confusion matrices, per-class accuracy, training dashboard
-- Head-to-head comparison: **with augmentation vs without augmentation**
-- Model export for deployment
+## Colab
 
-## 🔑 Environment Variables
+`colab_notebook/` contains notebooks for segmentation and classifier fine-tuning, comparisons, and export for deployment.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENROUTER_API_KEY` | (required) | Your OpenRouter API key |
-| `OPENROUTER_MODEL` | `qwen/qwen3.6-plus:free` | LLM model for shopping agent |
-| `SEGMENTATION_MODEL_PATH` | `yolov8n-seg.pt` | Path to segmentation weights |
-| `CONFIDENCE_THRESHOLD` | `0.35` | Minimum detection confidence |
-| `IMAGE_SIZE` | `640` | Input image size for segmentation |
+---
+
+## License
+
+Copyright (c) 2026 Kushagra Gupta
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
