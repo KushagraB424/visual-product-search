@@ -24,7 +24,8 @@ class RoboflowSegmentationService:
             tmp_path = tmp.name
 
         try:
-            result = self.model.predict(tmp_path, confidence=40, overlap=30)
+            # Instance segmentation API: only image_path + confidence (no overlap; that is for tiled OD models).
+            result = self.model.predict(tmp_path, confidence=40)
             # result.json() gives predictions
             return result.json()
         finally:
