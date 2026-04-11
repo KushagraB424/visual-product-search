@@ -1,0 +1,36 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Models and Weights
+*.pt
+*.pth
+*.h5
+*.onnx
+models/weights/
+yolov8n-seg.pt
+runs/
+
+# Data and Outputs
+static/crops/
+sample_images/output/
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# Jupyter Notebook
+.ipynb_checkpoints
