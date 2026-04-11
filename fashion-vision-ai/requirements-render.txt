@@ -1,0 +1,18 @@
+# Slim dependencies for Render (no torch / ultralytics / timm).
+# Pair with SKIP_LOCAL_ML=true or deploy on Render (RENDER=true).
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+python-dotenv==1.0.1
+jinja2==3.1.5
+
+Pillow>=10.0.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+
+httpx==0.28.1
+aiofiles==24.1.0
+
+roboflow>=1.1.0,<2

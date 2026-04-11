@@ -1,0 +1,13 @@
+# Blueprint: https://render.com/docs/blueprint-spec
+# Service root is the inner package directory (contains app/ and utils/).
+
+services:
+  - type: web
+    name: fashion-vision-ai
+    runtime: python
+    rootDir: fashion-vision-ai
+    buildCommand: pip install -r requirements-render.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SKIP_LOCAL_ML
+        value: "true"

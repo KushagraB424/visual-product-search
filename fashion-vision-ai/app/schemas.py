@@ -46,6 +46,7 @@ class HealthResponse(BaseModel):
     status: str = "ok"
     segmentation_model_loaded: bool = False
     classification_model_loaded: bool = False
+    local_ml_enabled: bool = True
 
 
 # ── Chat Widget Schemas ──────────────────────────────────────────────────

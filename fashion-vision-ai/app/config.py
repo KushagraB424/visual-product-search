@@ -8,6 +8,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _env_truthy(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+# When True, YOLO / EfficientNet are not loaded (for Render and other small hosts).
+# Render sets RENDER=true automatically; you can also set SKIP_LOCAL_ML=1 explicitly.
+SKIP_LOCAL_ML = _env_truthy("SKIP_LOCAL_ML") or os.getenv(
+    "RENDER", ""
+).strip().lower() == "true"
+
 # ── Paths ────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
