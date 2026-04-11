@@ -55,5 +55,5 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # ── Server ───────────────────────────────────────────────────────────────
 HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "8000"))
+PORT = int(os.getenv("PORT", "10000"))
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
