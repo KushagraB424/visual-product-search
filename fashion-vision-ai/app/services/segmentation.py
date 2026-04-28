@@ -16,6 +16,7 @@ from app.config import (
     CONFIDENCE_THRESHOLD,
     IMAGE_SIZE,
     PERSON_CLASS_ID,
+    RELEVANT_COCO_CLASSES,
     SEGMENTATION_MODEL_PATH,
 )
 
@@ -79,6 +80,8 @@ class SegmentationService:
 
         for i in range(len(boxes)):
             cls_id = int(boxes.cls[i].item())
+            if cls_id not in RELEVANT_COCO_CLASSES:
+                continue
             conf_score = float(boxes.conf[i].item())
             bbox = boxes.xyxy[i].cpu().numpy().tolist()  # [x1,y1,x2,y2]
 
